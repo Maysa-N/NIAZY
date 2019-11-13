@@ -43,10 +43,9 @@ get_info <-function(trait){
 }
 #Getting Data from NCBI:
 search_result <- entrez_search(db = "pubmed", term = "Daphnia")
-# There are 1688 hits but the maximmum I can get are 310!
 #search.result #this is a mistake done in previous code the correct variable is search_result
 search_result
-#search for sequences within two genes COI and 16S
+#search for sequences of Daphnia within two genes COI and 16S
 COI.search <- entrez_search(db = "nuccore", term = "(Daphnia[ORGN] AND COI[TITL]) NOT (genome[TITL])", retmax = 310)
 gene16S.search <- entrez_search(db = "nuccore", term = "(Daphnia[ORGN] AND 16S[TITL]) NOT (genome[TITL])", retmax = 400)
 
@@ -72,46 +71,59 @@ dfCOI$Uniqe.Identifier <- word(dfCOI$COI.Title, 1L)
 df16S$Uniqe.Identifier <- word(df16S$gene16S.Title, 1L)
 #dfCOI$Gene.Name <- str_extract(dfCOI$COI.Title, "COI.*") # this gave a wrong result
 str_detect(dfCOI$COI.Title, "COI")#check whether all the sequences have "COI" gene name in the column Title , according to the results all of them have COI gene in the COI.Title    column, so it is quite easy to extract the word COI from the COI_Title column. 
+str_detect(df16S$gene16S.Title, "16S")
+
 dfCOI$Gene.Name <- str_extract(dfCOI$COI.Title, "COI")
 df16S$Gene.Name <- str_extract(df16S$gene16S.Title, "16S")
+#Perform preliminary data checking.
+hist(str_length(dfCOI$COI.Sequence))#check the histogram of sequence lengths of COI
+hist(str_length(df16S$gene16S.Sequence))#check the histogram of sequence lengths of 16S
+#remove the samples with extreamly large sequences
+df16S_filtered <- df16S %>% 
+  filter(str_length(gene16S.Sequence)<600)
+hist(str_length(df16S_filtered$gene16S.Sequence))#check the histogram of after removing the samples with extremely large sequences of 16S
+#check the unique species names
+get_info(dfCOI$Species.Name)
+get_info(df16S_filtered$Species.Name)
+#By looking at this result, I found that there is a species name other than Daphnia.So when I check the dataset there were 10 samples from Anaompoda sp., therefore, rows from 98:107 which are Anompoda sp. were removed for downstream analysis
+#remove outliars
+dfCOI_filtered <- dfCOI[-c(98:107), ]
 
 #perform an alignment to the whole dataset, to check whether it contains outliers
 #I have already use the function  clusters which I have built at the top of the code. Now it is quite easy as no need to repeat the whole thing to get the cluster. Just need to replace x,  
-clusters(dfCOI$COI.Sequence)
+clusters(dfCOI_filtered$COI.Sequence)
 title("Phylogeny of COI gene")
 
-clusters(df16sSubset$gene16S.Sequence)
+clusters(df16S_filtered$gene16S.Sequence)
 title("Phylogeny of 16S gene")
 
 
-#There are 12 genes after the alignment checking and blastin the outliers, found that there are 10 samples from Anaompoda sp., therefore, clean the data and remove rows from 98:107 which are Anompoda sp.
-#remove outliars
-dfCOISubset <- dfCOI[-c(98:107), ]
-#remove the samples with extreamly large sequences
-df16sSubset <- df16S %>% 
-  filter(str_length(gene16S.Sequence)<600)
+
 #Using the function get_info, which I have built at the top of the code.Now it is easy as no need to repeat the whole code. Just need to replace the trait, 
-get_info(dfCOI$Gene.Name)
-get_info(df16S$Gene.Name)
-get_info(dfCOISubset$Species.Name)
-get_info(df16sSubset$Species.Name)
+get_info(dfCOI_filtered$Gene.Name)
+get_info(df16S_filtered$Gene.Name)
+get_info(dfCOI_filtered$Species.Name)
+get_info(df16S_filtered$Species.Name)
 
 #perform an alignment and buid a dendrogram for the subset
 #use the function clusters which I have created at the top of the code
-clusters(dfCOISubset$COI.Sequence)
-title("Phylogeny of COI gene")
+#clusters(dfCOISubset$COI.Sequence)
+#title("Phylogeny of COI gene")
 
-clusters(df16sSubset$gene16S.Sequence)
-title("Phylogeny of 16S gene")
+#clusters(df16sSubset$gene16S.Sequence)
+#title("Phylogeny of 16S gene")
 #randomly select sequences per species for COI and 16S genes to identify whether the two genes (COI and 16S) yield the same or different phylogenetic hypotheses
-DaphniaCOI <- dfCOISubset %>%
+DaphniaCOI <- dfCOI_filtered %>%
   group_by(Species.Name) %>%
   sample_n(1)
-Daphnia16S <- df16sSubset %>%
+Daphnia16S <- df16S_filtered %>%
   group_by(Species.Name) %>%
   sample_n(1)
 #In the previous code the species that overlap within the two gens were selected manually, but it is convenient to use the function merge to get all data in one datafram for further analysis
 dfOverlap <- merge(DaphniaCOI, Daphnia16S, by = "Species.Name", all = F)
+#check the number of species and species names that can be seen in both datasets (COI and 16S)
+get_info(dfOverlap$Species.Name)
+
 #convert the data type
 dfOverlap$COI.Sequence <- DNAStringSet(dfOverlap$COI.Sequence)
 dfOverlap$gene16S.Sequence <- DNAStringSet(dfOverlap$gene16S.Sequence)
@@ -122,6 +134,9 @@ names(dfOverlap$gene16S.Sequence) <- dfOverlap$Species.Name
 #Here I'm not using the function clusters as it won't give a dendrogram with assigned variable as I need the assigned cluster variable to perform tanglegram 
 DaphniaCOIOverlap.Alignment <- DNAStringSet(muscle::muscle(dfOverlap$COI.Sequence, log = "log.tx", verbose = T), use.names = TRUE)
 Daphnia16SOverlap.Alignment <- DNAStringSet(muscle::muscle(dfOverlap$gene16S.Sequence, log = "log.tx", verbose = T), use.names = TRUE)
+#check the alignment
+lapply(DaphniaCOIOverlap.Alignment, str_count, "-")
+lapply(Daphnia16SOverlap.Alignment, str_count, "-")
 BrowseSeqs(DaphniaCOIOverlap.Alignment)
 BrowseSeqs(Daphnia16SOverlap.Alignment)
 #replace the name "Daphnia" with "D." for a clear visualization
