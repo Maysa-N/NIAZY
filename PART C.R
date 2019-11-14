@@ -12,12 +12,12 @@ library(DECIPHER) #BrowseSeqs, IdClusters
 library(phangorn) #NJ
 library(dendextend) #tanglegram
 
-#Use functions as part of the code as opposed to repeat the    same block of code in the single script, because functions can reduce duplication of codes, improve clarity of the code, and also able to reuse the code.  a single script, because it reduces duplication of codes, improve clarity of the code, and also able to reuse the code. Here creates a function called clusters to build dendrogram through aligning and performing a distance matrix
-clusters <- function(x){
-  #covnert the class of the sequences into Biostrings
-  x <- DNAStringSet(x)
+#Use functions as a part of the code as opposed to repeat the same block of code in the single script, because functions can reduce duplication of codes, improve clarity of the code, and also able to reuse the code. Here creates a function called clusters to build dendrogram through aligning and performing a distance matrix. Sequences are nucleotides in the dataset. It is factor variable (the class of sequences is a factor;eg:dfCOI_filtered$COI.Sequence, df16S_filtered$gene16S.Sequence)
+clusters <- function(sequences){
+  #covnert the class of the sequences from factors into Biostrings 
+  sequences <- DNAStringSet(sequences)
   #perform alignment using muscle
-  Alignment <- DNAStringSet(muscle::muscle(x, log = "log.tx", verbose = T), use.names = TRUE)
+  Alignment <- DNAStringSet(muscle::muscle(sequences, log = "log.tx", verbose = T), use.names = TRUE)
   #display aligned sequences through web browser 
   visual <- BrowseSeqs(Alignment)
   #convert the class from the package Biostrings in BioConductor for consistency within ape package. Converting this data type is essential for further downstream analysis.
@@ -31,6 +31,7 @@ clusters <- function(x){
   #Returns results variable to the global environment
   return(result)
 }
+#The trait is character variable. (e.g:dfCOI$Species.Name, dfCOI$Gene.Name)
 get_info <-function(trait){
   #how many observations
   trait_num<- length(unique(trait))
@@ -59,13 +60,14 @@ write(gene16S.fetch, "gene16S.fetch.fasta", sep = "\n")
 #Function to read DNAStringSet from the recieved file which was in fasta format
 string.SetCOI <- readDNAStringSet("COI.fetch.fasta")
 string.Set16S <- readDNAStringSet("gene16S.fetch.fasta")
-#2-Build dataframes:
+#Build dataframes:
 #create  dataframes for COI gene and 16S gene
 dfCOI <- data.frame(COI.Title = names(string.SetCOI), COI.Sequence = paste(string.SetCOI))
 df16S <- data.frame(gene16S.Title = names(string.Set16S), gene16S.Sequence = paste(string.Set16S))
 #word is in stringr package to get 2nd and 3rd words in the Title details
 dfCOI$Species.Name <- word(dfCOI$COI.Title, 2L, 3L) 
 df16S$Species.Name <- word(df16S$gene16S.Title, 2L, 3L)
+
 #The accession number is in the first word of the details in Title
 dfCOI$Uniqe.Identifier <- word(dfCOI$COI.Title, 1L)
 df16S$Uniqe.Identifier <- word(df16S$gene16S.Title, 1L)
@@ -83,11 +85,13 @@ df16S_filtered <- df16S %>%
   filter(str_length(gene16S.Sequence)<600)
 hist(str_length(df16S_filtered$gene16S.Sequence))#check the histogram of after removing the samples with extremely large sequences of 16S
 #check the unique species names
-get_info(dfCOI$Species.Name)
+get_info(dfCOI$Species.Name) #38 species with Anomopoda sp. and Daphniopsis truncata
 get_info(df16S_filtered$Species.Name)
-#By looking at this result, I found that there is a species name other than Daphnia.So when I check the dataset there were 10 samples from Anaompoda sp., therefore, rows from 98:107 which are Anompoda sp. were removed for downstream analysis
+
+#By looking at this result, I found that there are two species other than Daphnia.So when I check the dataset there were 10 samples from Anaompoda sp. and one sample from Daphniopsis truncata ,  therefore, rows from 98:107 which are Anompoda sp. and the row 247 (Daphniopsis truncata) were removed for downstream analysis
 #remove outliars
-dfCOI_filtered <- dfCOI[-c(98:107), ]
+dfCOI_filtered <- dfCOI[-c(98:107,247), ]
+get_info(dfCOI_filtered$Species.Name) #36 species contains only Daphnia species
 
 #perform an alignment to the whole dataset, to check whether it contains outliers
 #I have already use the function  clusters which I have built at the top of the code. Now it is quite easy as no need to repeat the whole thing to get the cluster. Just need to replace x,  
@@ -96,8 +100,6 @@ title("Phylogeny of COI gene")
 
 clusters(df16S_filtered$gene16S.Sequence)
 title("Phylogeny of 16S gene")
-
-
 
 #Using the function get_info, which I have built at the top of the code.Now it is easy as no need to repeat the whole code. Just need to replace the trait, 
 get_info(dfCOI_filtered$Gene.Name)
@@ -170,7 +172,7 @@ clusters.Daphnia16SOverlap <- IdClusters(distanceMatrixDaphnia16SOverlap,
                                          showPlot = TRUE,
                                          type = "dendrogram",
                                          verbose = TRUE)
-tanglegram(clusters.DaphniaCOIOverlap, clusters.Daphnia16SOverlap) 
+#tanglegram(clusters.DaphniaCOIOverlap, clusters.Daphnia16SOverlap) 
 #A dendlist is a function in dendextend package, which produces the dendlist class. This function uses to compare two dendrograms (clusters.DaphniaCOIOverlap, clusters.Daphnia16SOverlap) by chaining them together.
 dl <- dendlist(clusters.DaphniaCOIOverlap, clusters.Daphnia16SOverlap)
 tanglegram(dl, common_subtrees_color_lines = TRUE, highlight_distinct_edges  = TRUE, highlight_branches_lwd = FALSE, main = "Tanglegram of COI and 16S marker",main_left = "COI gene", main_right = "16S gene", margin_inner=9, cex_main = 1.3)
